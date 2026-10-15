@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Pengumpul Resi PDF</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mut:#6b7280;--bd:#e3e6ea;--ac:#2563eb;--acb:#eaf1ff;--wr:#b45309;--wrb:#fff4e0;--er:#b91c1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111418;--card:#1a1e24;--tx:#e8eaed;--mut:#9aa3ad;--bd:#2b313a;--ac:#6ea0ff;--acb:#1b2a47;--wr:#f5b35a;--wrb:#3a2c14;--er:#ff8a8a}}
+:root[data-theme="dark"]{--bg:#111418;--card:#1a1e24;--tx:#e8eaed;--mut:#9aa3ad;--bd:#2b313a;--ac:#6ea0ff;--acb:#1b2a47;--wr:#f5b35a;--wrb:#3a2c14;--er:#ff8a8a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;margin:0 0 4px}
+p.sub{margin:0 0 16px;color:var(--mut)}
+#drop{border:2px dashed var(--bd);background:var(--card);border-radius:14px;padding:28px 16px;text-align:center;cursor:pointer;transition:.15s}
+#drop.over,#drop:hover{border-color:var(--ac);background:var(--acb)}
+#drop b{display:block;font-size:16px}
+#drop span{color:var(--mut);font-size:13px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin:18px 0 8px}
+.stat{color:var(--mut);font-size:14px}
+button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:7px 12px;border-radius:8px;cursor:pointer}
+button.p{background:var(--ac);border-color:var(--ac);color:#fff}
+button:hover{filter:brightness(.96)}
+.wrap{overflow-x:auto;background:var(--card);border:1px solid var(--bd);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:900px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--bd);white-space:nowrap}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);background:var(--bg)}
+td.n,th.n{text-align:right}
+tbody tr:last-child td{border-bottom:0}
+input.c{font:inherit;color:inherit;background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 6px;width:100%;min-width:110px}
+input.c:hover,input.c:focus{border-color:var(--bd);background:var(--bg);outline:none}
+input.num{text-align:right;font-variant-numeric:tabular-nums}
+.fn{max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--mut);font-size:13px}
+.tag{font-size:11px;padding:1px 7px;border-radius:99px;background:var(--wrb);color:var(--wr);margin-left:6px}
+tr.dup td{background:var(--wrb)}
+tfoot td{font-weight:600;background:var(--bg);border-top:1px solid var(--bd)}
+.x{border:0;background:none;color:var(--mut);padding:2px 8px}
+.x:hover{color:var(--er)}
+.empty{padding:28px;text-align:center;color:var(--mut)}
+#msg{font-size:13px;color:var(--mut);margin-top:10px;min-height:20px}
+details{margin-top:14px;font-size:13px;color:var(--mut)}
+select.st{font:inherit;font-size:13px;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:3px 6px}
+button.lk{padding:3px 9px;font-size:13px}
+</style>
+</head>
+<body>
+<main>
+<h1>📦 Pengumpul Resi PDF</h1>
+<p class="sub">Unggah satu atau banyak PDF resi. No. resi dan biaya netto terdeteksi otomatis ke dalam tabel. PDF teks diproses di perangkat Anda; halaman hasil scan dikirim sebagai gambar ke Claude (atas izin Anda) untuk dibaca.</p>
+
+<div id="drop" tabindex="0"><b>Tarik file PDF ke sini atau klik untuk memilih</b><span>Bisa banyak file sekaligus. PDF berisi banyak halaman akan dipecah per halaman.</span></div>
+<input id="file" type="file" accept="application/pdf" multiple hidden>
+<div id="msg"></div>
+
+<div class="bar">
+  <div class="stat" id="stat">Belum ada data</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button id="copy" class="p">Salin tabel</button>
+    <button id="clear">Kosongkan</button>
+  </div>
+</div>
+
+<div class="wrap">
+<table>
+<thead><tr><th>#</th><th>Tanggal Posting</th><th>Penerima</th><th>No. Resi</th><th class="n">Biaya Netto (Rp)</th><th>Sumber</th><th>Status Paket</th></tr></thead>
+<tbody id="tb"></tbody>
+<tfoot id="tf"></tfoot>
+</table>
+<div class="empty" id="empty">Tabel masih kosong.</div>
+</div>
+
+<details><summary>Catatan deteksi</summary>
+<p>Pencarian no. resi memakai label (No. Resi, AWB, Tracking) lalu pola umum (SPX, JP, JNE, J&amp;T, SiCepat, dll). Biaya netto dicari dari label seperti Netto, Total Bayar, Total Pembayaran, Penghasilan, Ongkir. Semua sel bisa diedit manual bila hasil kurang tepat. Baris dengan no. resi ganda disorot kuning. PDF hasil scan (gambar) dibaca oleh Claude, dengan izin sekali di awal. Hasil scan sebaiknya dicek ulang, terutama angka.</p></details>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script>
+var rows=[],uid=0,STS=["Belum dicek","Dalam pengiriman","Sudah diterima","Retur","Bermasalah"];
+var $=function(id){return document.getElementById(id)};
+try{pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"}catch(e){}
+
+var AMT="(?:Rp\\.?\\s*)?(\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d{1,2})?|\\d{3,})";
+var NET_LABELS=["penghasilan\\s+bersih","total\\s+penghasilan","netto","net\\s*amount","net","total\\s+pembayaran","total\\s+bayar","jumlah\\s+bayar","total\\s+tagihan","grand\\s+total","total\\s+ongkir","ongkos\\s+kirim","ongkir","biaya\\s+kirim","biaya","total"];
+
+function toNum(s){
+  s=s.replace(/\s/g,"");
+  if(/[.,]\d{1,2}$/.test(s)&&/[.,]\d{3}[.,]\d{1,2}$|^\d+[.,]\d{1,2}$/.test(s)&&!/^\d{1,3}([.,]\d{3})+$/.test(s)) s=s.replace(/[.,]\d{1,2}$/,"");
+  return parseInt(s.replace(/[.,]/g,""),10)||0;
+}
+function findNet(t){
+  for(var i=0;i<NET_LABELS.length;i++){
+    var re=new RegExp("(?:"+NET_LABELS[i]+")[^\\d\\n]{0,25}"+AMT,"i");
+    var m=t.match(re);
+    if(m){var v=toNum(m[1]);if(v>0)return v}
+  }
+  return 0;
+}
+function findResi(t){
+  var m=t.match(/(?:no\.?\s*resi|nomor\s*resi|resi|awb|tracking(?:\s*(?:no|number|id))?|no\.?\s*pengiriman)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]{7,24})/i);
+  if(m&&/\d/.test(m[1]))return m[1].toUpperCase();
+  var pats=[/\b(SPX[A-Z]{0,3}\d{8,})\b/i,/\b(JP\d{8,})\b/i,/\b(JN[ET]\d{8,})\b/i,/\b(CM\d{8,})\b/i,/\b(TKP\d{8,}|[A-Z]{3,6}\d{9,}[A-Z]?)\b/,/\b(00\d{10,14})\b/,/\b(\d{12,16})\b/];
+  for(var i=0;i<pats.length;i++){var r=t.match(pats[i]);if(r)return r[1].toUpperCase()}
+  return "";
+}
+async function pageText(page){
+  var c=await page.getTextContent(),lines={},ys=[];
+  c.items.forEach(function(it){
+    if(!it.str.trim())return;
+    var y=Math.round(it.transform[5]/3);
+    if(!lines[y]){lines[y]=[];ys.push(y)}
+    lines[y].push({x:it.transform[4],s:it.str});
+  });
+  ys.sort(function(a,b){return b-a});
+  return ys.map(function(y){return lines[y].sort(function(a,b){return a.x-b.x}).map(function(o){return o.s}).join(" ")}).join("\n");
+}
+function findPen(t){
+  var m=t.match(/(?:(?:nama\s*penerima|penerima|receiver|consignee)[ \t]*[:\-]?|(?:ditujukan\s*)?kepada[ \t]*[:\-])[ \t]*([^\n]{2,70})/i);
+  if(!m)return "";
+  var v=m[1].split(/\s{2,}|\s(?:no\.?\s*resi|tgl|tanggal|alamat|telp|hp|rp|total|berat|kurir|pengirim)\b/i)[0].trim();
+  return v.length>=2&&/[A-Za-z]/.test(v)?v:"";
+}
+function findDate(t){
+  var D="(\\d{1,2}[\\/.-]\\d{1,2}[\\/.-]\\d{2,4}|\\d{4}-\\d{2}-\\d{2}|\\d{1,2}\\s+(?:jan|feb|mar|apr|mei|jun|jul|agu|ags|sep|okt|nov|des)[a-z]*\\.?\\s+\\d{2,4})";
+  var m=t.match(new RegExp("(?:tanggal\\s*posting|tgl\\.?\\s*posting|waktu\\s*posting|posting|tanggal|tgl\\.?)[^\\d\\n]{0,20}"+D,"i"))||t.match(new RegExp(D,"i"));
+  return m?m[1].trim():"";
+}
+function tableItems(t){
+  var out=[],seen={},re=/(?:Rp\.?\s*)?\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|Rp\.?\s*\d+/gi;
+  t.split("\n").forEach(function(l){
+    var r=findResi(l);if(!r||seen[r])return;
+    var am=l.replace(new RegExp(r,"i")," ").match(re);if(!am)return;
+    var v=toNum(am[am.length-1]);if(!v)return;
+    seen[r]=1;out.push({resi:r,net:v,tgl:findDate(l)||findDate(t),pen:findPen(l)});
+  });
+  return out.length>=2?out:[{resi:findResi(t),net:findNet(t),tgl:findDate(t),pen:findPen(t)}];
+}
+async function ocrPage(pg){
+  try{
+    var sample=await claude.use("sample");
+    if(!sample)throw new Error("fitur Claude tidak tersedia di sini");
+    var vp=pg.getViewport({scale:1.8}),cv=document.createElement("canvas");
+    cv.width=vp.width;cv.height=vp.height;
+    await pg.render({canvasContext:cv.getContext("2d"),viewport:vp}).promise;
+    var blob=await new Promise(function(r){cv.toBlob(r,"image/jpeg",.85)});
+    var d=await sample.json("Gambar ini adalah scan dokumen klaim/resi pengiriman. Ambil SEMUA nomor resi (AWB) yang ada beserta tanggal posting, nama penerima, dan biaya netto masing-masing (angka rupiah tanpa titik/koma pemisah; jika hanya ada satu total untuk satu resi, pakai itu). Jangan menebak: jika tidak terbaca, kosongkan. Balas HANYA JSON tanpa teks lain: {\"items\":[{\"resi\":\"...\",\"netto\":12345,\"tanggal_posting\":\"dd/mm/yyyy\",\"penerima\":\"...\"}]}",{images:[blob]});
+    return (d.items||[]).map(function(i){return{resi:String(i.resi||"").toUpperCase().replace(/\s/g,""),net:toNum(String(i.netto||0)),tgl:String(i.tanggal_posting||""),pen:String(i.penerima||"")}});
+  }catch(e){
+    $("msg").textContent="Gagal membaca scan ("+(e.code||e.message)+")";
+    return [];
+  }
+}
+async function handle(files){
+  var msg=$("msg"),start=rows.length;
+  for(var f=0;f<files.length;f++){
+    var file=files[f];
+    if(file.type!=="application/pdf"&&!/\.pdf$/i.test(file.name))continue;
+    msg.textContent="Memproses "+file.name+" ("+(f+1)+"/"+files.length+")…";
+    try{
+      var pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+      var found=[],first=null;
+      for(var p=1;p<=pdf.numPages;p++){
+        var pg=await pdf.getPage(p),t=await pageText(pg),label=file.name+(pdf.numPages>1?" · hal. "+p:""),items;
+        if(t.replace(/\s/g,"").length<25){
+          msg.textContent="Halaman scan terdeteksi, dibaca dengan Claude: "+label+"…";
+          items=await ocrPage(pg);label+=" (scan)";
+        }else items=tableItems(t);
+        items.forEach(function(it){
+          var row={id:++uid,resi:it.resi,net:it.net,tgl:it.tgl||"",pen:it.pen||"",src:label,flag:!it.resi||!it.net};
+          if(!first)first=row;
+          if(it.resi)found.push(row);
+        });
+      }
+      if(!found.length&&!first)first={id:++uid,resi:"",net:0,src:file.name,flag:true};
+      (found.length?found:[first]).forEach(function(x){rows.push(x)});
+    }catch(e){
+      msg.textContent="Gagal membaca "+file.name+": "+e.message;
+      rows.push({id:++uid,resi:"",net:0,src:file.name,flag:true});
+    }
+  }
+  msg.textContent="Selesai. Periksa baris bertanda “cek”, sel dapat diedit.";
+  render();
+}
+function fmt(n){return n?n.toLocaleString("id-ID"):""}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function render(){
+  var cnt={};rows.forEach(function(r){if(r.resi)cnt[r.resi]=(cnt[r.resi]||0)+1});
+  $("tb").innerHTML=rows.map(function(r,i){
+    var dup=r.resi&&cnt[r.resi]>1;
+    return '<tr class="'+(dup?"dup":"")+'"><td style="white-space:nowrap">'+(i+1)+'<button class="x" data-del="'+r.id+'" title="Hapus">✕</button></td>'+'<td><input class="c" data-id="'+r.id+'" data-k="tgl" value="'+esc(r.tgl||"")+'" placeholder="dd/mm/yyyy" style="min-width:105px"></td>'+'<td><input class="c" data-id="'+r.id+'" data-k="pen" value="'+esc(r.pen||"")+'" placeholder="nama penerima" style="min-width:150px"></td>'+
+    '<td><input class="c" data-id="'+r.id+'" data-k="resi" value="'+esc(r.resi)+'" placeholder="isi manual">'+(dup?'<span class="tag">ganda</span>':'')+(r.flag&&(!r.resi||!r.net)?'<span class="tag">cek</span>':'')+'</td>'+
+    '<td class="n"><input class="c num" data-id="'+r.id+'" data-k="net" inputmode="numeric" value="'+fmt(r.net)+'" placeholder="0"></td>'+
+    '<td class="fn" title="'+esc(r.src)+'">'+esc(r.src)+'</td>'+
+    '<td style="white-space:nowrap"><select class="st" data-id="'+r.id+'" data-k="st">'+STS.map(function(s){return '<option'+((r.st||STS[0])===s?' selected':'')+'>'+s+'</option>'}).join('')+'</select> <button class="lk" data-lacak="'+r.id+'" title="Buka halaman lacak Pos Indonesia untuk resi ini">Lacak ↗</button></td></tr>';
+  }).join("");
+  var tot=rows.reduce(function(a,r){return a+(r.net||0)},0);
+  $("tf").innerHTML=rows.length?'<tr><td></td><td></td><td></td><td>Total ('+rows.length+' resi)</td><td class="n">'+tot.toLocaleString("id-ID")+'</td><td></td><td></td></tr>':"";
+  $("empty").style.display=rows.length?"none":"block";
+  $("stat").textContent=rows.length?rows.length+" resi · total Rp "+tot.toLocaleString("id-ID"):"Belum ada data";
+}
+$("tb").addEventListener("change",function(e){
+  var el=e.target,id=+el.dataset.id;if(!id)return;
+  var r=rows.filter(function(x){return x.id===id})[0];
+  if(el.dataset.k==="st"){r.st=el.value;render();return}
+  if(el.dataset.k==="pen")r.pen=el.value.trim();
+  else if(el.dataset.k==="tgl")r.tgl=el.value.trim();
+  else if(el.dataset.k==="resi")r.resi=el.value.trim().toUpperCase();
+  else r.net=toNum(el.value||"0");
+  r.flag=false;render();
+});
+$("tb").addEventListener("click",function(e){
+  var lk=e.target.dataset.lacak;
+  if(lk){
+    var rr=rows.filter(function(x){return x.id===+lk})[0];
+    if(rr&&rr.resi){
+      try{navigator.clipboard.writeText(rr.resi)}catch(x){}
+      var u="https://www.posindonesia.co.id/en/tracking/"+encodeURIComponent(rr.resi);
+      var w=null;try{w=window.open(u,"_blank","noopener")}catch(x){}
+      $("msg").textContent=w?"Membuka pelacakan Pos Indonesia untuk "+rr.resi+"…":"Popup diblokir. Buka manual: "+u;
+    }
+    return;
+  }
+  var d=e.target.dataset.del;if(!d)return;
+  rows=rows.filter(function(x){return x.id!==+d});render();
+});
+$("clear").onclick=function(){if(!rows.length||confirm("Hapus semua data?")){rows=[];$("msg").textContent="";render()}};
+$("copy").onclick=function(){
+  var tsv="No\tTanggal Posting\tPenerima\tNo. Resi\tBiaya Netto\tStatus Paket\n"+rows.map(function(r,i){return (i+1)+"\t"+(r.tgl||"")+"\t"+(r.pen||"")+"\t"+r.resi+"\t"+r.net+"\t"+(r.st||STS[0])}).join("\n");
+  var ok=function(){$("msg").textContent="Tabel disalin. Tempel langsung ke Excel atau Google Sheets."};
+  var fb=function(){var t=document.createElement("textarea");t.value=tsv;document.body.appendChild(t);t.select();try{document.execCommand("copy");ok()}catch(e){$("msg").textContent="Gagal menyalin."}t.remove()};
+  try{navigator.clipboard.writeText(tsv).then(ok,fb)}catch(e){fb()}
+};
+var drop=$("drop"),inp=$("file");
+drop.onclick=function(){inp.click()};
+drop.onkeydown=function(e){if(e.key==="Enter")inp.click()};
+inp.onchange=function(){handle(Array.from(inp.files));inp.value=""};
+["dragenter","dragover"].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.add("over")})});
+["dragleave","drop"].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.remove("over")})});
+drop.addEventListener("drop",function(e){handle(Array.from(e.dataTransfer.files))});
+render();
+</script>
+</body>
+</html>
